@@ -2,9 +2,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
-df = pd.read_csv('Student_Discipline.csv')
+
+
+df = pd.read_csv('backend/Student_Discipline.csv')
 df.columns = ["School Year","District Code","District","School Code","Organization","Race","Gender","Grade","SpecialDemo",
 "Geography","SubGroup","Category","Rowstatus","Students","Enrollment","PctEnrollment","Incidents","AvgDuration"]
 
@@ -21,6 +24,14 @@ df = df[df['Category'] == 'In-School Suspension']
 df = df[["SubGroup", "Category", "Students", "Enrollment", "PctEnrollment", "Incidents", "AvgDuration"]]
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/api/data")
 def get_data(category: str):
