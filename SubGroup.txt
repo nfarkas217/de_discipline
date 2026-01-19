@@ -1,0 +1,95 @@
+Hispanic/Latino
+Native American
+African American
+White
+Asian
+Native Hawaiian/Pacific Islander
+Multi-Racial
+All Students
+English Learners
+Foster Care
+Homeless
+Low Income
+Students with Disabilities
+Non-SWD
+Multi-Racial/Homeless
+White/Low-Income
+White/Non-EL Students
+White/Non-Foster Care
+White/Non-Homeless
+White/Non-SWD
+Multi-Racial/Low-Income
+Native American/Low-Income
+White/Students with Disabilities
+Non-EL Students
+Non-Foster Care
+Non-Homeless
+Non Low-Income
+White/Non Low-Income
+White/Military Connected Youth
+Military Dependent Youth
+White/Homeless
+Multi-Racial/Non-EL Students
+Multi-Racial/Foster Care
+African American/Homeless
+African American/Non-SWD
+African American/Students with Disabilities
+Multi-Racial/Non-SWD
+African American/Low-Income
+Hispanic/Latino/Non-SWD
+Hispanic/Latino/Active EL Students
+Hispanic/Latino/Foster Care
+Hispanic/Latino/Homeless
+Hispanic/Latino/Low-Income
+Hispanic/Latino/Military Connected Youth
+Hispanic/Latino/Non-EL Students
+Hispanic/Latino/Non-Foster Care
+Hispanic/Latino/Non-Homeless
+Hispanic/Latino/Non Low-Income
+Hispanic/Latino/Students with Disabilities
+Native American/Active EL Students
+Native American/Foster Care
+Native American/Homeless
+Native American/Military Connected Youth
+Native American/Non-EL Students
+Native American/Non-Foster Care
+Native American/Non-Homeless
+Native American/Non Low-Income
+Native American/Non-SWD
+Native American/Students with Disabilities
+African American/Active EL Students
+African American/Foster Care
+African American/Military Connected Youth
+African American/Non-EL Students
+African American/Non-Foster Care
+African American/Non-Homeless
+African American/Non Low-Income
+White/Active EL Students
+White/Foster Care
+Asian American/Active EL Students
+Asian American/Homeless
+Asian American/Low-Income
+Asian American/Military Connected Youth
+Asian American/Non-EL Students
+Asian American/Non-Foster Care
+Asian American/Non-Homeless
+Asian American/Non Low-Income
+Asian American/Non-SWD
+Asian American/Students with Disabilities
+Native Hawaiian/Pacific Islander/Active EL Students
+Native Hawaiian/Pacific Islander/Homeless
+Native Hawaiian/Pacific Islander/Low-Income
+Native Hawaiian/Pacific Islander/Non-EL Students
+Native Hawaiian/Pacific Islander/Non-Foster Care
+Native Hawaiian/Pacific Islander/Non-Homeless
+Native Hawaiian/Pacific Islander/Non Low-Income
+Native Hawaiian/Pacific Islander/Non-SWD
+Native Hawaiian/Pacific Islander/Students with Disabilities
+Multi-Racial/Active EL Students
+Multi-Racial/Military Connected Youth
+Multi-Racial/Non-Foster Care
+Multi-Racial/Non-Homeless
+Multi-Racial/Non Low-Income
+Multi-Racial/Students with Disabilities
+Gap Group (Hisp,AfAm,AmInd,SWD,ELL,LI)
+Asian American/Foster Care
