@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+*.pyc
 
 # Virtual Environment
 venv/
@@ -23,6 +24,11 @@ Thumbs.db
 
 # Data files
 *.csv
+
+# Node
+node_modules/
+.cache/
+
 
 # Environment variables
 .env
