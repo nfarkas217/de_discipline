@@ -15,6 +15,41 @@
   margin: 0 auto;
 }
 
+.tab-nav {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.tab-button {
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-button:hover {
+  color: #374151;
+}
+
+.tab-button-active {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+}
+
+.outliers-hint {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 1rem;
+}
+
 .main-title {
   font-size: 2.5rem;
   font-weight: bold;
@@ -35,6 +70,81 @@
   font-weight: 600;
   color: #374151;
   margin-bottom: 1rem;
+}
+
+.district-selector {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.district-selector .section-title {
+  margin-bottom: 0;
+}
+
+.district-dropdown {
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  color: #374151;
+  cursor: pointer;
+  accent-color: #4f46e5;
+}
+
+.district-dropdown:hover {
+  border-color: #a5b4fc;
+}
+
+.district-dropdown:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+}
+
+.discipline-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.discipline-option {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.discipline-option:hover {
+  border-color: #a5b4fc;
+  background: #f9fafb;
+}
+
+.discipline-option:has(.discipline-radio:checked) {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.discipline-radio {
+  width: 18px;
+  height: 18px;
+  margin-right: 0.5rem;
+  cursor: pointer;
+  accent-color: #4f46e5;
+}
+
+.discipline-label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
 }
 
 .category-grid {

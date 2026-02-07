@@ -1,24 +1,43 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 import "./App.css";
 
-export default function App() {
-  const categories = [
-    "All Students",
-    "Black",
-    "Hispanic",
-    "Students with Disabilities",
-    "Low-income students",
-  ];
+const categories = [
+  "All Students",
+  "Black",
+  "White",
+  "Asian",
+  "Hispanic",
+  "Students with Disabilities",
+  "Low-income students",
+];
 
+const TAB_VISUALIZER = "visualizer";
+const TAB_OUTLIERS = "outliers";
+
+export default function App() {
+  const districts = ["Christina", "Colonial", "Indian River", "Red Clay"];
+  const [activeTab, setActiveTab] = useState(TAB_VISUALIZER);
+  const [district, setDistrict] = useState("Christina");
+  const [outliersDistrict, setOutliersDistrict] = useState("Christina");
+  const [outliersData, setOutliersData] = useState([]);
+  const [outliersLoading, setOutliersLoading] = useState(false);
+  const [outliersError, setOutliersError] = useState("");
+  const disciplineOptions = [
+    { value: "in_school", label: "In-School Suspension" },
+    { value: "out_of_school", label: "Out-of-School Suspension" },
+    { value: "both", label: "Both (average)" },
+  ];
+  const [discipline, setDiscipline] = useState("in_school");
   const [selectedCategories, setSelectedCategories] = useState(categories);
   const [allData, setAllData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -27,13 +46,35 @@ export default function App() {
   const colors = {
     "All Students": "#8b5cf6",
     Black: "#4f46e5",
+    White: "#0ea5e9",
+    Asian: "#ec4899",
     Hispanic: "#10b981",
     "Students with Disabilities": "#f59e0b",
     "Low-income students": "#ef4444",
   };
 
-  // Load all data on component mount
-  React.useEffect(() => {
+  const fetchData = useCallback(
+    async (category) => {
+      try {
+        const response = await fetch(
+          `/api/data?category=${encodeURIComponent(category)}&district=${encodeURIComponent(district)}&discipline=${encodeURIComponent(discipline)}`,
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch data");
+        }
+
+        const result = await response.json();
+        return result;
+      } catch (err) {
+        throw err;
+      }
+    },
+    [district, discipline],
+  );
+
+  // Load all data when district or discipline changes
+  useEffect(() => {
     const loadAllData = async () => {
       setLoading(true);
       setError("");
@@ -54,24 +95,28 @@ export default function App() {
     };
 
     loadAllData();
-  }, []);
+  }, [district, fetchData]);
 
-  const fetchData = async (category) => {
-    try {
-      const response = await fetch(
-        `/api/data?category=${encodeURIComponent(category)}`,
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch data");
+  // Load outliers when on Outliers tab and district changes
+  useEffect(() => {
+    if (activeTab !== TAB_OUTLIERS) return;
+    const loadOutliers = async () => {
+      setOutliersLoading(true);
+      setOutliersError("");
+      try {
+        const res = await fetch(`/api/outliers?district=${encodeURIComponent(outliersDistrict)}`);
+        if (!res.ok) throw new Error("Failed to fetch outliers");
+        const data = await res.json();
+        setOutliersData(data);
+      } catch (err) {
+        setOutliersError(err.message);
+        setOutliersData([]);
+      } finally {
+        setOutliersLoading(false);
       }
-
-      const result = await response.json();
-      return result;
-    } catch (err) {
-      throw err;
-    }
-  };
+    };
+    loadOutliers();
+  }, [activeTab, outliersDistrict]);
 
   const handleCategoryToggle = async (category) => {
     const isCurrentlySelected = selectedCategories.includes(category);
@@ -99,53 +144,65 @@ export default function App() {
     }
   };
 
-  // Prepare data for the chart by combining all selected categories
+  // Build time-series chart data: one object per year with a key per selected category (PctEnrollment)
   const getChartData = () => {
     if (selectedCategories.length === 0) return [];
 
-    const chartData = [];
-
-    // Get all unique names (in this case, just the category itself)
+    const yearsSet = new Set();
     selectedCategories.forEach((category) => {
       const categoryData = allData[category];
       if (categoryData && categoryData.length > 0) {
-        categoryData.forEach((item) => {
-          chartData.push({
-            name: category,
-            PctEnrollment: item.value,
-            Students: item.Students,
-            Enrollment: item.Enrollment,
-            category: category,
-            fill: colors[category],
-          });
-        });
+        categoryData.forEach((item) => yearsSet.add(item["School Year"]));
       }
     });
+    const years = Array.from(yearsSet).sort();
 
-    return chartData;
+    return years.map((year) => {
+      const point = { year };
+      selectedCategories.forEach((category) => {
+        const categoryData = allData[category];
+        const row = categoryData?.find((r) => r["School Year"] === year);
+        const isRedacted = row?.redacted === true;
+        point[category] =
+          row == null ? undefined : isRedacted ? null : Number(row.value);
+        point[`${category}_redacted`] = isRedacted;
+        point[`${category}_Students`] = row?.Students;
+        point[`${category}_Enrollment`] = row?.Enrollment;
+      });
+      return point;
+    });
   };
 
-  // Custom tooltip to show Students / Enrollment
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div
-          style={{
-            backgroundColor: "white",
-            border: "1px solid #ccc",
-            padding: "10px",
-            borderRadius: "4px",
-          }}
-        >
-          <p style={{ margin: 0, fontWeight: "bold" }}>{data.name}</p>
-          <p style={{ margin: "5px 0 0 0" }}>
-            {data.Students} / {data.Enrollment}
+  // Custom tooltip: show year and each category's value (and optional Students/Enrollment)
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length || !label) return null;
+    const data = payload[0]?.payload;
+    if (!data) return null;
+    return (
+      <div
+        style={{
+          backgroundColor: "white",
+          border: "1px solid #ccc",
+          padding: "10px",
+          borderRadius: "4px",
+          minWidth: "160px",
+        }}
+      >
+        <p style={{ margin: 0, fontWeight: "bold", marginBottom: "6px" }}>
+          {label}
+        </p>
+        {selectedCategories.map((cat) => (
+          <p key={cat} style={{ margin: "2px 0", fontSize: "0.875rem" }}>
+            {cat}:{" "}
+            {data[`${cat}_redacted`]
+              ? "Redacted"
+              : data[cat] != null
+                ? Number(data[cat]).toFixed(2) + "%"
+                : "—"}
           </p>
-        </div>
-      );
-    }
-    return null;
+        ))}
+      </div>
+    );
   };
 
   // Get all table data
@@ -165,12 +222,47 @@ export default function App() {
   return (
     <div className="app-container">
       <div className="content-wrapper">
-        <h1 className="main-title">Student Data Filter & Visualizer</h1>
+        <nav className="tab-nav" aria-label="Main">
+          <button
+            type="button"
+            className={`tab-button ${activeTab === TAB_VISUALIZER ? "tab-button-active" : ""}`}
+            onClick={() => setActiveTab(TAB_VISUALIZER)}
+          >
+            Student Data Filter & Visualizer
+          </button>
+          <button
+            type="button"
+            className={`tab-button ${activeTab === TAB_OUTLIERS ? "tab-button-active" : ""}`}
+            onClick={() => setActiveTab(TAB_OUTLIERS)}
+          >
+            Outliers and Deep Dives
+          </button>
+        </nav>
+
+        {activeTab === TAB_VISUALIZER && (
+          <>
+            <h1 className="main-title">Student Data Filter & Visualizer</h1>
+
+            <div className="card district-selector">
+          <label htmlFor="district-select" className="section-title">
+            School District
+          </label>
+          <select
+            id="district-select"
+            value={district}
+            onChange={(e) => setDistrict(e.target.value)}
+            className="district-dropdown"
+          >
+            {districts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="card">
-          <h2 className="section-title">
-            Select Categories (Multiple Selection)
-          </h2>
+          <h2 className="section-title">SubGroup</h2>
 
           <div className="category-grid">
             {categories.map((category) => (
@@ -197,6 +289,25 @@ export default function App() {
               Clear All Selections
             </button>
           )}
+        </div>
+
+        <div className="card">
+          <h2 className="section-title">Discipline Category</h2>
+          <div className="discipline-options">
+            {disciplineOptions.map((opt) => (
+              <label key={opt.value} className="discipline-option">
+                <input
+                  type="radio"
+                  name="discipline"
+                  value={opt.value}
+                  checked={discipline === opt.value}
+                  onChange={(e) => setDiscipline(e.target.value)}
+                  className="discipline-radio"
+                />
+                <span className="discipline-label">{opt.label}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         {loading && (
@@ -226,26 +337,70 @@ export default function App() {
 
             <div className="chart-container">
               <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={getChartData()}>
+                <LineChart
+                  data={getChartData()}
+                  margin={{ top: 5, right: 20, left: 80, bottom: 10 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="name"
+                    dataKey="year"
                     label={{
-                      value: "Subgroup",
+                      value: "School Year",
                       position: "insideBottom",
                       offset: -5,
                     }}
                   />
                   <YAxis
                     label={{
-                      value: "PctEnrollment",
+                      value: "Pct of SubGroup Enrollment Disciplined",
                       angle: -90,
                       position: "insideLeft",
+                      style: { textAnchor: "middle" },
                     }}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="PctEnrollment" />
-                </BarChart>
+                  <Legend />
+                  {selectedCategories.map((category) => (
+                    <Line
+                      key={category}
+                      type="monotone"
+                      dataKey={category}
+                      name={category}
+                      stroke={colors[category]}
+                      strokeWidth={2}
+                      connectNulls={false}
+                      dot={(props) => {
+                        const { cx, cy, payload, dataKey } = props;
+                        const isRedacted = payload[`${dataKey}_redacted`];
+                        if (isRedacted) {
+                          return (
+                            <text
+                              x={cx}
+                              y={cy}
+                              dy={4}
+                              textAnchor="middle"
+                              fill="#94a3b8"
+                              fontSize={9}
+                              fontWeight="bold"
+                            >
+                              R
+                            </text>
+                          );
+                        }
+                        return (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={4}
+                            fill={colors[category]}
+                            stroke="white"
+                            strokeWidth={1}
+                          />
+                        );
+                      }}
+                    />
+                  ))}
+                </LineChart>
               </ResponsiveContainer>
             </div>
 
@@ -298,6 +453,81 @@ export default function App() {
               Select one or more categories above to view data
             </p>
           </div>
+        )}
+          </>
+        )}
+
+        {activeTab === TAB_OUTLIERS && (
+          <>
+            <h1 className="main-title">Outliers and Deep Dives</h1>
+            <div className="card district-selector">
+              <label htmlFor="outliers-district-select" className="section-title">
+                School District
+              </label>
+              <select
+                id="outliers-district-select"
+                value={outliersDistrict}
+                onChange={(e) => setOutliersDistrict(e.target.value)}
+                className="district-dropdown"
+              >
+                {districts.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {outliersLoading && (
+              <div className="card loading-container">
+                <div className="spinner"></div>
+                <p>Loading data...</p>
+              </div>
+            )}
+            {outliersError && (
+              <div className="error-box">
+                <p><strong>Error:</strong> {outliersError}</p>
+              </div>
+            )}
+            {!outliersLoading && !outliersError && outliersData.length > 0 && (
+              <div className="card">
+                <h2 className="section-title">
+                  Schools by gap (Black % − All Students %), largest gap first
+                </h2>
+                <p className="outliers-hint">
+                  School year: {outliersData[0]?.school_year ?? "—"}
+                </p>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>School (Organization)</th>
+                        <th>Black %</th>
+                        <th>All Students %</th>
+                        <th>Difference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {outliersData.map((row, idx) => (
+                        <tr key={idx}>
+                          <td><strong>{row.Organization}</strong></td>
+                          <td>{row.black_pct_enrollment != null ? Number(row.black_pct_enrollment).toFixed(2) : "—"}</td>
+                          <td>{row.all_students_pct_enrollment != null ? Number(row.all_students_pct_enrollment).toFixed(2) : "—"}</td>
+                          <td>{row.difference != null ? Number(row.difference).toFixed(2) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {!outliersLoading && !outliersError && outliersData.length === 0 && (
+              <div className="card">
+                <p style={{ textAlign: "center", color: "#6b7280" }}>
+                  No school-level data for this district.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
