@@ -33,6 +33,14 @@ df["School Year"] = df["School Year"].astype(str).str.strip()
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 DISTRICTS = {"Christina":"Christina School District", "Colonial":"Colonial School District", "Indian River":"Indian River School District", "Red Clay":"Red Clay Consolidated School District"}
 
 DISCIPLINE_OPTIONS = ("in_school", "out_of_school", "both")
@@ -118,26 +126,70 @@ def get_outliers(district: str = "Christina"):
     latest_year = sub["School Year"].astype(str).max()
     sub = sub[sub["School Year"] == latest_year]
     # PctEnrollment for African American and All Students per Organization
-    black = sub[sub["SubGroup"] == "African American"][["Organization", "PctEnrollment"]].rename(
-        columns={"PctEnrollment": "black_pct_enrollment"}
+    black = sub[sub["SubGroup"] == "African American"][["Organization", "PctEnrollment", "Students", "Enrollment"]].rename(
+        columns={"PctEnrollment": "black_pct_enrollment", "Students": "black_students", "Enrollment": "black_enrollment"}
     )
-    all_stud = sub[sub["SubGroup"] == "All Students"][["Organization", "PctEnrollment"]].rename(
-        columns={"PctEnrollment": "all_students_pct_enrollment"}
+    all_stud = sub[sub["SubGroup"] == "All Students"][["Organization", "PctEnrollment", "Students", "Enrollment", "Incidents"]].rename(
+        columns={
+            "PctEnrollment": "all_students_pct_enrollment",
+            "Students": "all_students_students",
+            "Enrollment": "all_students_enrollment",
+            "Incidents": "all_students_incidents",
+        }
     )
     merged = black.merge(all_stud, on="Organization", how="outer")
-    merged["difference"] = (
-        merged["black_pct_enrollment"].fillna(0) - merged["all_students_pct_enrollment"].fillna(0)
-    )
+
+    # Fill NaN values before calculating difference
+    merged["black_pct_enrollment"] = merged["black_pct_enrollment"].fillna(0)
+    merged["all_students_pct_enrollment"] = merged["all_students_pct_enrollment"].fillna(0)
+    for col in ["black_students", "black_enrollment", "all_students_students", "all_students_enrollment", "all_students_incidents"]:
+        merged[col] = merged[col].fillna(0).astype(int)
+
+    merged["difference"] = merged["black_pct_enrollment"] - merged["all_students_pct_enrollment"]
+    merged["incident_rate"] = (merged["all_students_incidents"] / merged["all_students_enrollment"].replace(0, np.nan)).fillna(0)
     merged = merged.sort_values("difference", ascending=False).reset_index(drop=True)
     merged["school_year"] = latest_year
-    return merged.to_dict("records")
+
+    # Convert to dict and replace any remaining NaN with None
+    result = merged.to_dict("records")
+    for row in result:
+        for key, value in row.items():
+            if pd.isna(value):
+                row[key] = None
+
+    return result
+
+
+@app.get("/api/school-deep-dive")
+def get_school_deep_dive(school: str):
+    """
+    Get data for a specific school for the last 3 available years.
+    """
+    school_df = df[df["Organization"] == school].copy()
+    if school_df.empty:
+        return []
+
+    # Get the last 3 years of data available for that school
+    available_years = sorted(school_df["School Year"].unique(), reverse=True)
+    last_three_years = available_years[:3]
+
+    school_df = school_df[school_df["School Year"].isin(last_three_years)]
+
+    if school_df.empty:
+        return []
+
+    # Sort for consistent presentation
+    school_df = school_df.sort_values(["School Year", "SubGroup", "Category"], ascending=[False, True, True])
+
+    # Convert to dict and replace any remaining NaN with None
+    result = school_df.to_dict("records")
+    for row in result:
+        for key, value in row.items():
+            if pd.isna(value):
+                row[key] = None
+    return result
 
 
 @app.get("/")
 async def root():
     return {"message": "API is running"}
-
-
-
-
-
