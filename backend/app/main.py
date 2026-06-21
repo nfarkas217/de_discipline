@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.stats as stats
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
@@ -14,6 +15,11 @@ df = pd.read_csv(BASE_DIR / "Student_Discipline.csv")
 #df = pd.read_csv('backend/Student_Discipline.csv')
 df.columns = ["School Year","District Code","District","School Code","Organization","Race","Gender","Grade","SpecialDemo",
 "Geography","SubGroup","Category","Rowstatus","Students","Enrollment","PctEnrollment","Incidents","AvgDuration"]
+
+# Clean up key string columns by stripping whitespace to ensure joins and filters work correctly
+for col in ["District", "Organization", "SubGroup", "Category"]:
+    if df[col].dtype == 'object':
+        df[col] = df[col].str.strip()
 
 # replace NaN values with 0
 df = df.fillna(0)
@@ -41,7 +47,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DISTRICTS = {"Christina":"Christina School District", "Colonial":"Colonial School District", "Indian River":"Indian River School District", "Red Clay":"Red Clay Consolidated School District"}
+DISTRICTS = {
+    "Christina": "Christina School District",
+    "Colonial": "Colonial School District",
+    "Indian River": "Indian River School District",
+    "Red Clay": "Red Clay Consolidated School District",
+    "Capital": "Capital School District",
+    "Charter New Castle": "Charter School of New Castle",
+    "Milford": "Milford School District",
+    "NCC Vo-Tech": "New Castle County Vocational-Technical School District",
+    "Seaford": "Seaford School District",
+    "Delmar": "Delmar School District",
+    "Smyrna": "Smyrna School District",
+    "Woodbridge": "Woodbridge School District",
+    "Lake Forest": "Lake Forest School District",
+    "Laurel": "Laurel School District",
+}
 
 DISCIPLINE_OPTIONS = ("in_school", "out_of_school", "both")
 
@@ -109,20 +130,37 @@ def get_data(category: str, district: str = "Christina", discipline: str = "in_s
     return out
 
 @app.get("/api/outliers")
-def get_outliers(district: str = "Christina"):
-    """Schools in district ordered by (Black PctEnrollment − All Students PctEnrollment), biggest difference first."""
+def get_outliers(district: str = "Christina", discipline: str = "in_school"):
+    """
+    Schools in district ordered by (Black PctEnrollment − All Students PctEnrollment), biggest difference first.
+    discipline can be 'in_school', 'out_of_school', or 'both'.
+    """
     if district not in DISTRICTS:
         district = "Christina"
     district_name = DISTRICTS[district]
-    # All rows in this district, In-School only, exclude district-level aggregate
-    sub = df[
-        (df["District"] == district_name)
-        & (df["Organization"] != district_name)
-        & (df["Category"] == "In-School Suspension")
-    ].copy()
+
+    # Identify if the district has individual schools listed
+    district_mask = df["District"] == district_name
+    has_individual_schools = df[district_mask & (df["Organization"] != district_name)].any().any()
+
+    if has_individual_schools:
+        base_sub = df[district_mask & (df["Organization"] != district_name)].copy()
+    else:
+        base_sub = df[district_mask].copy()
+
+    if discipline == "both":
+        sub = (
+            base_sub[base_sub["Category"].isin(['In-School Suspension', 'Out-of-School Suspension'])]
+            .groupby(["Organization", "School Year", "SubGroup"], as_index=False)
+            .agg({"Students": "sum", "Enrollment": "sum", "Incidents": "sum"})
+            .assign(PctEnrollment=lambda x: (x["Students"] / x["Enrollment"].replace(0, np.nan)).fillna(0) * 100)
+        )
+    else:
+        cat = "In-School Suspension" if discipline == "in_school" else "Out-of-School Suspension"
+        sub = base_sub[base_sub["Category"] == cat].copy()
+
     if sub.empty:
         return []
-    # Use most recent year in the data
     latest_year = sub["School Year"].astype(str).max()
     sub = sub[sub["School Year"] == latest_year]
     # PctEnrollment for African American and All Students per Organization
@@ -147,6 +185,49 @@ def get_outliers(district: str = "Christina"):
 
     merged["difference"] = merged["black_pct_enrollment"] - merged["all_students_pct_enrollment"]
     merged["incident_rate"] = (merged["all_students_incidents"] / merged["all_students_enrollment"].replace(0, np.nan)).fillna(0)
+
+    # --- Statistical Analysis (Risk Ratio, CI, P-value) ---
+    # Calculate Non-Black counts
+    merged['non_black_students'] = (merged['all_students_students'] - merged['black_students']).clip(lower=0)
+    merged['non_black_enrollment'] = (merged['all_students_enrollment'] - merged['black_enrollment']).clip(lower=0)
+
+    def calc_stats(row):
+        a = row['black_students']
+        n1 = row['black_enrollment']
+        c = row['non_black_students']
+        n2 = row['non_black_enrollment']
+
+        if n1 <= 0 or n2 <= 0:
+            return pd.Series([None, None, None, None])
+
+        # Risk Ratio
+        p1 = a / n1
+        p2 = c / n2
+        rr = p1 / p2 if p2 > 0 else None
+
+        # 95% CI for Risk Ratio
+        ci_low, ci_high = None, None
+        if a > 0 and c > 0 and rr is not None:
+            # SE(ln(RR))
+            se = np.sqrt((1/a) - (1/n1) + (1/c) - (1/n2))
+            ci_low = np.exp(np.log(rr) - 1.96 * se)
+            ci_high = np.exp(np.log(rr) + 1.96 * se)
+
+        # P-value (Chi-square)
+        # Contingency table: [[Black Susp, Black Not Susp], [Non-Black Susp, Non-Black Not Susp]]
+        obs = np.array([[a, n1 - a], [c, n2 - c]])
+        p_val = None
+        if (obs >= 0).all():
+            try:
+                _, p_val, _, _ = stats.chi2_contingency(obs, correction=False)
+            except ValueError:
+                # Scipy can raise ValueError if a row/column is all zeros.
+                p_val = None
+        
+        return pd.Series([rr, ci_low, ci_high, p_val])
+
+    merged[['risk_ratio', 'ci_low', 'ci_high', 'p_value']] = merged.apply(calc_stats, axis=1)
+
     merged = merged.sort_values("difference", ascending=False).reset_index(drop=True)
     merged["school_year"] = latest_year
 
