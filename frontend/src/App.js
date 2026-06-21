@@ -25,7 +25,22 @@ const TAB_VISUALIZER = "visualizer";
 const TAB_OUTLIERS = "outliers";
 
 export default function App() {
-  const districts = ["Christina", "Colonial", "Indian River", "Red Clay"];
+  const districts = [
+    "Christina",
+    "Colonial",
+    "Indian River",
+    "Red Clay",
+    "Capital",
+    "Charter New Castle",
+    "Milford",
+    "NCC Vo-Tech",
+    "Seaford",
+    "Delmar",
+    "Smyrna",
+    "Woodbridge",
+    "Lake Forest",
+    "Laurel",
+  ];
   const [activeTab, setActiveTab] = useState(TAB_VISUALIZER);
   const [district, setDistrict] = useState("Christina");
   const [outliersDistrict, setOutliersDistrict] = useState("Christina");
@@ -33,6 +48,11 @@ export default function App() {
   const [outliersLoading, setOutliersLoading] = useState(false);
   const [outliersError, setOutliersError] = useState("");
   const [outliersSortConfig, setOutliersSortConfig] = useState({
+    key: "difference",
+    direction: "descending",
+  });
+  const [outliersCombinedData, setOutliersCombinedData] = useState([]);
+  const [outliersCombinedSortConfig, setOutliersCombinedSortConfig] = useState({
     key: "difference",
     direction: "descending",
   });
@@ -117,12 +137,25 @@ export default function App() {
       setOutliersLoading(true);
       setOutliersError("");
       try {
-        const res = await fetch(
-          `/api/outliers?district=${encodeURIComponent(outliersDistrict)}`,
-        );
-        if (!res.ok) throw new Error("Failed to fetch outliers");
-        const data = await res.json();
-        setOutliersData(data);
+        const [resIss, resBoth] = await Promise.all([
+          fetch(
+            `/api/outliers?district=${encodeURIComponent(
+              outliersDistrict,
+            )}&discipline=in_school`,
+          ),
+          fetch(
+            `/api/outliers?district=${encodeURIComponent(
+              outliersDistrict,
+            )}&discipline=both`,
+          ),
+        ]);
+
+        if (!resIss.ok || !resBoth.ok)
+          throw new Error("Failed to fetch outliers");
+        const dataIss = await resIss.json();
+        const dataBoth = await resBoth.json();
+        setOutliersData(dataIss);
+        setOutliersCombinedData(dataBoth);
       } catch (err) {
         setOutliersError(err.message);
         setOutliersData([]);
@@ -297,6 +330,40 @@ export default function App() {
     }
     return sortableItems;
   }, [outliersData, outliersSortConfig]);
+
+  const requestOutliersCombinedSort = (key) => {
+    let direction = "descending";
+    if (
+      outliersCombinedSortConfig.key === key &&
+      outliersCombinedSortConfig.direction === "descending"
+    ) {
+      direction = "ascending";
+    }
+    setOutliersCombinedSortConfig({ key, direction });
+  };
+
+  const sortedOutliersCombinedData = useMemo(() => {
+    if (!outliersCombinedData || outliersCombinedData.length === 0) return [];
+    const sortableItems = [...outliersCombinedData];
+    if (outliersCombinedSortConfig.key) {
+      sortableItems.sort((a, b) => {
+        if (a[outliersCombinedSortConfig.key] === null) return 1;
+        if (b[outliersCombinedSortConfig.key] === null) return -1;
+        if (
+          a[outliersCombinedSortConfig.key] < b[outliersCombinedSortConfig.key]
+        ) {
+          return outliersCombinedSortConfig.direction === "ascending" ? -1 : 1;
+        }
+        if (
+          a[outliersCombinedSortConfig.key] > b[outliersCombinedSortConfig.key]
+        ) {
+          return outliersCombinedSortConfig.direction === "ascending" ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [outliersCombinedData, outliersCombinedSortConfig]);
 
   // Custom tooltip: show year and each category's value (and optional Students/Enrollment)
   const CustomTooltip = ({ active, payload, label, series }) => {
@@ -798,120 +865,406 @@ export default function App() {
                           <thead>
                             <tr>
                               <th className="sortable-header-container">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    requestOutliersSort("Organization")
-                                  }
-                                  className="sortable-header"
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
                                 >
-                                  School (Organization)
-                                  {outliersSortConfig.key ===
-                                    "Organization" && (
-                                    <span className="sort-arrow">
-                                      {outliersSortConfig.direction ===
-                                      "descending"
-                                        ? " 🔽"
-                                        : " 🔼"}
-                                    </span>
-                                  )}
-                                </button>
-                              </th>
-                              <th className="sortable-header-container">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    requestOutliersSort("black_pct_enrollment")
-                                  }
-                                  className="sortable-header"
-                                >
-                                  Black (% and count)
-                                  {outliersSortConfig.key ===
-                                    "black_pct_enrollment" && (
-                                    <span className="sort-arrow">
-                                      {outliersSortConfig.direction ===
-                                      "descending"
-                                        ? " 🔽"
-                                        : " 🔼"}
-                                    </span>
-                                  )}
-                                </button>
-                              </th>
-                              <th className="sortable-header-container">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    requestOutliersSort(
-                                      "all_students_pct_enrollment",
-                                    )
-                                  }
-                                  className="sortable-header"
-                                >
-                                  All Students (% and count)
-                                  {outliersSortConfig.key ===
-                                    "all_students_pct_enrollment" && (
-                                    <span className="sort-arrow">
-                                      {outliersSortConfig.direction ===
-                                      "descending"
-                                        ? " 🔽"
-                                        : " 🔼"}
-                                    </span>
-                                  )}
-                                </button>
-                              </th>
-                              <th className="sortable-header-container">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    requestOutliersSort("difference")
-                                  }
-                                  className="sortable-header"
-                                >
-                                  Difference
-                                  {outliersSortConfig.key === "difference" && (
-                                    <span className="sort-arrow">
-                                      {outliersSortConfig.direction ===
-                                      "descending"
-                                        ? " 🔽"
-                                        : " 🔼"}
-                                    </span>
-                                  )}
-                                </button>
-                              </th>
-                              <th className="sortable-header-container">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    requestOutliersSort("incident_rate")
-                                  }
-                                  className="sortable-header"
-                                >
-                                  Incident Rate{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort("Organization")
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    School (Organization)
+                                    {outliersSortConfig.key ===
+                                      "Organization" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
                                   <span
-                                    title="Total incidents divided by total enrollment. Can be >100% if students receive multiple suspensions."
+                                    title="The name of the school."
                                     style={{
                                       cursor: "help",
-                                      fontWeight: "normal",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
                                     }}
                                   >
                                     &#9432;
                                   </span>
-                                  {outliersSortConfig.key ===
-                                    "incident_rate" && (
-                                    <span className="sort-arrow">
-                                      {outliersSortConfig.direction ===
-                                      "descending"
-                                        ? " 🔽"
-                                        : " 🔼"}
-                                    </span>
-                                  )}
-                                </button>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort(
+                                        "black_pct_enrollment",
+                                      )
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    Black (% and count)
+                                    {outliersSortConfig.key ===
+                                      "black_pct_enrollment" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="The percentage and count of Black students who received an in-school suspension. Calculated as: (Number of Black Students Suspended / Total Black Student Enrollment)."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort(
+                                        "all_students_pct_enrollment",
+                                      )
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    All Students (% and count)
+                                    {outliersSortConfig.key ===
+                                      "all_students_pct_enrollment" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="The percentage and count of all students who received an in-school suspension. Calculated as: (Total Students Suspended / Total Student Enrollment)."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort("difference")
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    Difference
+                                    {outliersSortConfig.key ===
+                                      "difference" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="The arithmetic difference between the percentage of Black students suspended and the percentage of all students suspended. Formula: (Black % Suspended) - (All Students % Suspended)."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort("incident_rate")
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    Incident Rate
+                                    {outliersSortConfig.key ===
+                                      "incident_rate" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="Total in-school suspension incidents for all students divided by the total student enrollment. This can be greater than 100% if some students receive multiple suspensions. Formula: (Total Incidents / Total Enrollment)."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort("risk_ratio")
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    Risk Ratio
+                                    {outliersSortConfig.key ===
+                                      "risk_ratio" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="Compares the suspension rate for Black students to the rate for all non-Black students. A value of 2, for example, means Black students are suspended at twice the rate of non-Black students. Formula: (Black Students Suspended / Black Enrollment) / (Non-Black Students Suspended / Non-Black Enrollment)."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort("ci_low")
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    95% CI
+                                    {outliersSortConfig.key === "ci_low" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="The 95% confidence interval for the Risk Ratio. It provides a range of plausible values for the true risk ratio in the broader population. If the interval does not include 1.0, the result is statistically significant."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
+                              </th>
+                              <th className="sortable-header-container">
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      requestOutliersSort("p_value")
+                                    }
+                                    className="sortable-header"
+                                    style={{
+                                      border: "none",
+                                      background: "none",
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      padding: 0,
+                                      fontSize: "inherit",
+                                      display: "flex",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    P-value
+                                    {outliersSortConfig.key === "p_value" && (
+                                      <span className="sort-arrow">
+                                        {outliersSortConfig.direction ===
+                                        "descending"
+                                          ? " 🔽"
+                                          : " 🔼"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <span
+                                    title="The p-value from a Chi-square test. It indicates the probability of observing the data (or something more extreme) if there were no real difference in suspension rates between Black and non-Black students. A value < 0.05 is typically considered statistically significant."
+                                    style={{
+                                      cursor: "help",
+                                      fontSize: "1.1em",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    &#9432;
+                                  </span>
+                                </div>
                               </th>
                             </tr>
                           </thead>
                           <tbody>
                             {sortedOutliersData.map((row, idx) => (
-                              <tr key={idx}>
+                              <tr
+                                key={idx}
+                                style={
+                                  row.p_value != null && row.p_value < 0.05
+                                    ? {
+                                        backgroundColor:
+                                          "rgba(239, 68, 68, 0.1)",
+                                      }
+                                    : {}
+                                }
+                              >
                                 <td>
                                   <button
                                     type="button"
@@ -984,6 +1337,212 @@ export default function App() {
                                   {row.incident_rate != null
                                     ? `${(row.incident_rate * 100).toFixed(2)}%`
                                     : "—"}
+                                </td>
+                                <td>
+                                  {row.risk_ratio != null
+                                    ? Number(row.risk_ratio).toFixed(2)
+                                    : "N/A"}
+                                </td>
+                                <td>
+                                  {row.ci_low != null && row.ci_high != null
+                                    ? `${Number(row.ci_low).toFixed(
+                                        2,
+                                      )} – ${Number(row.ci_high).toFixed(2)}`
+                                    : "N/A"}
+                                </td>
+                                <td>
+                                  {row.p_value != null
+                                    ? row.p_value < 0.001
+                                      ? "< 0.001"
+                                      : row.p_value.toFixed(3)
+                                    : "N/A"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                {!outliersLoading &&
+                  !outliersError &&
+                  outliersCombinedData.length > 0 && (
+                    <div className="card">
+                      <h2 className="section-title">
+                        Schools by Combined suspension gap (Black % − All
+                        Students %), ISS + OSS combined
+                      </h2>
+                      <p className="outliers-hint">
+                        School year:{" "}
+                        {outliersCombinedData[0]?.school_year ?? "—"}
+                      </p>
+                      <div className="table-container">
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th className="sortable-header-container">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    requestOutliersCombinedSort("Organization")
+                                  }
+                                  className="sortable-header"
+                                  style={{
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                    padding: 0,
+                                    fontSize: "inherit",
+                                  }}
+                                >
+                                  School (Organization)
+                                  {outliersCombinedSortConfig.key ===
+                                    "Organization" && (
+                                    <span className="sort-arrow">
+                                      {outliersCombinedSortConfig.direction ===
+                                      "descending"
+                                        ? " 🔽"
+                                        : " 🔼"}
+                                    </span>
+                                  )}
+                                </button>
+                              </th>
+                              <th className="sortable-header-container">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    requestOutliersCombinedSort(
+                                      "black_pct_enrollment",
+                                    )
+                                  }
+                                  className="sortable-header"
+                                  style={{
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                    padding: 0,
+                                    fontSize: "inherit",
+                                  }}
+                                >
+                                  Black %
+                                  {outliersCombinedSortConfig.key ===
+                                    "black_pct_enrollment" && (
+                                    <span className="sort-arrow">
+                                      {outliersCombinedSortConfig.direction ===
+                                      "descending"
+                                        ? " 🔽"
+                                        : " 🔼"}
+                                    </span>
+                                  )}
+                                </button>
+                              </th>
+                              <th className="sortable-header-container">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    requestOutliersCombinedSort(
+                                      "all_students_pct_enrollment",
+                                    )
+                                  }
+                                  className="sortable-header"
+                                  style={{
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                    padding: 0,
+                                    fontSize: "inherit",
+                                  }}
+                                >
+                                  All Students %
+                                  {outliersCombinedSortConfig.key ===
+                                    "all_students_pct_enrollment" && (
+                                    <span className="sort-arrow">
+                                      {outliersCombinedSortConfig.direction ===
+                                      "descending"
+                                        ? " 🔽"
+                                        : " 🔼"}
+                                    </span>
+                                  )}
+                                </button>
+                              </th>
+                              <th className="sortable-header-container">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    requestOutliersCombinedSort("difference")
+                                  }
+                                  className="sortable-header"
+                                  style={{
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                    padding: 0,
+                                    fontSize: "inherit",
+                                  }}
+                                >
+                                  Difference
+                                  {outliersCombinedSortConfig.key ===
+                                    "difference" && (
+                                    <span className="sort-arrow">
+                                      {outliersCombinedSortConfig.direction ===
+                                      "descending"
+                                        ? " 🔽"
+                                        : " 🔼"}
+                                    </span>
+                                  )}
+                                </button>
+                              </th>
+                              <th>Risk Ratio</th>
+                              <th>95% CI</th>
+                              <th>P-value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedOutliersCombinedData.map((row, idx) => (
+                              <tr
+                                key={idx}
+                                style={
+                                  row.p_value != null && row.p_value < 0.05
+                                    ? {
+                                        backgroundColor:
+                                          "rgba(239, 68, 68, 0.1)",
+                                      }
+                                    : {}
+                                }
+                              >
+                                <td>{row.Organization}</td>
+                                <td>
+                                  {row.black_pct_enrollment != null
+                                    ? `${Number(row.black_pct_enrollment).toFixed(2)}%`
+                                    : "—"}
+                                </td>
+                                <td>
+                                  {row.all_students_pct_enrollment != null
+                                    ? `${Number(row.all_students_pct_enrollment).toFixed(2)}%`
+                                    : "—"}
+                                </td>
+                                <td>
+                                  {row.difference != null
+                                    ? Number(row.difference).toFixed(2)
+                                    : "—"}
+                                </td>
+                                <td>
+                                  {row.risk_ratio
+                                    ? row.risk_ratio.toFixed(2)
+                                    : "N/A"}
+                                </td>
+                                <td>
+                                  {row.ci_low != null && row.ci_high != null
+                                    ? `${row.ci_low.toFixed(2)} – ${row.ci_high.toFixed(2)}`
+                                    : "N/A"}
+                                </td>
+                                <td>
+                                  {row.p_value ? row.p_value.toFixed(3) : "N/A"}
                                 </td>
                               </tr>
                             ))}
