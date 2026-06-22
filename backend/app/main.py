@@ -9,9 +9,22 @@ from pathlib import Path
 
 # Christina, Colonial, Indian River, Red Clay
 
-S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
-df = pd.read_csv(S3_URL, low_memory=False)
+app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
+@app.on_event("startup")
+def load_data():
+    global df
+    df = pd.read_csv(S3_URL, low_memory=False)
 #df = pd.read_csv('backend/Student_Discipline.csv')
 df.columns = ["School Year","District Code","District","School Code","Organization","Race","Gender","Grade","SpecialDemo",
 "Geography","SubGroup","Category","Rowstatus","Students","Enrollment","PctEnrollment","Incidents","AvgDuration"]
@@ -36,16 +49,6 @@ df = df[df['Category'].isin(['In-School Suspension', 'Out-of-School Suspension']
 df = df[["School Year", "SubGroup", "District", "Organization", "Category", "Rowstatus", "Students", "Enrollment", "PctEnrollment", "Incidents", "AvgDuration"]]
 # Normalize school year to string for consistent API response
 df["School Year"] = df["School Year"].astype(str).str.strip()
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 DISTRICTS = {
     "Christina": "Christina School District",
