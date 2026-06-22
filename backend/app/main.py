@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,59 +15,59 @@ app.add_middleware(
 S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
 
 df = None
+aggregated = None
 
 
-# -----------------------------
-# LAZY LOAD (ONLY WHEN NEEDED)
-# -----------------------------
-def get_data():
-    global df
+# -------------------------
+# LOAD + PRECOMPUTE ONCE
+# -------------------------
+def load_data():
+    global df, aggregated
 
     if df is not None:
-        return df
+        return
 
-    print("Loading dataset (first request only)...")
+    print("Loading dataset...")
 
-    try:
-        data = pd.read_csv(
-            S3_URL,
-            low_memory=False,
-            on_bad_lines="skip"
-        )
+    df = pd.read_csv(S3_URL, low_memory=False)
 
-        data.columns = [
-            "School Year","District Code","District","School Code","Organization",
-            "Race","Gender","Grade","SpecialDemo","Geography","SubGroup","Category",
-            "Rowstatus","Students","Enrollment","PctEnrollment","Incidents","AvgDuration"
-        ]
+    df.columns = [
+        "School Year","District Code","District","School Code","Organization",
+        "Race","Gender","Grade","SpecialDemo","Geography","SubGroup","Category",
+        "Rowstatus","Students","Enrollment","PctEnrollment","Incidents","AvgDuration"
+    ]
 
-        data = data.fillna(0)
+    df = df.fillna(0)
 
-        df = data
-        return df
+    # PRECOMPUTE (THIS IS THE FIX)
+    aggregated = (
+        df.groupby(["School Year", "SubGroup"], as_index=False)["PctEnrollment"]
+        .mean()
+    )
 
-    except Exception as e:
-        print("LOAD FAILED:", e)
-        return pd.DataFrame()
+    print("Dataset loaded + precomputed")
 
 
-# -----------------------------
-# HEALTH CHECK (FAST)
-# -----------------------------
+@app.on_event("startup")
+def startup():
+    load_data()
+
+
+# -------------------------
+# HEALTH CHECK
+# -------------------------
 @app.get("/")
 def root():
     return {"status": "ok"}
 
 
-# -----------------------------
-# API (SAFE)
-# -----------------------------
+# -------------------------
+# FAST API (NO HEAVY OPS)
+# -------------------------
 @app.get("/api/data")
-def get_data_api(category: str):
+def get_data(category: str):
 
-    data = get_data()
-
-    if data.empty:
+    if aggregated is None:
         return {"status": "loading"}
 
     mapping = {
@@ -82,12 +81,8 @@ def get_data_api(category: str):
     if category not in mapping:
         return []
 
-    work = data[data["SubGroup"] == mapping[category]]
-
-    result = (
-        work.groupby("School Year", as_index=False)["PctEnrollment"]
-        .mean()
-        .sort_values("School Year")
-    )
+    result = aggregated[
+        aggregated["SubGroup"] == mapping[category]
+    ].sort_values("School Year")
 
     return result.to_dict("records")
