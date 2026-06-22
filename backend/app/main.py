@@ -19,12 +19,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+df = None
 S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
 @app.on_event("startup")
 def load_data():
     global df
     df = pd.read_csv(S3_URL, low_memory=False)
+
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
 #df = pd.read_csv('backend/Student_Discipline.csv')
 df.columns = ["School Year","District Code","District","School Code","Organization","Race","Gender","Grade","SpecialDemo",
 "Geography","SubGroup","Category","Rowstatus","Students","Enrollment","PctEnrollment","Incidents","AvgDuration"]
