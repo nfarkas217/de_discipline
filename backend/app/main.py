@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import scipy.stats as stats
-import threading
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,23 +17,18 @@ app.add_middleware(
 S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
 
 df = None
-df_loading = False
 
 
 # -----------------------------
-# BACKGROUND DATA LOADER
+# SAFE SYNCHRONOUS LOAD (NO THREADS)
 # -----------------------------
-def load_dataset():
-    global df, df_loading
+@app.on_event("startup")
+def load_data():
+    global df
 
-    if df is not None:
-        return
-
-    df_loading = True
+    print("Loading dataset from S3...")
 
     try:
-        print("Loading dataset from S3...")
-
         data = pd.read_csv(
             S3_URL,
             low_memory=False,
@@ -64,36 +58,16 @@ def load_dataset():
         data["School Year"] = data["School Year"].astype(str)
 
         df = data
+
         print("Dataset loaded successfully")
 
     except Exception as e:
-        print("FAILED TO LOAD DATA:", e)
-
-    finally:
-        df_loading = False
+        print("DATA LOAD FAILED:", e)
+        df = pd.DataFrame()
 
 
 # -----------------------------
-# STARTUP (NON-BLOCKING)
-# -----------------------------
-@app.on_event("startup")
-def startup():
-    # run in background so Railway doesn't hang
-    thread = threading.Thread(target=load_dataset)
-    thread.start()
-
-
-# -----------------------------
-# SAFETY ACCESSOR
-# -----------------------------
-def get_df():
-    if df is None:
-        return None
-    return df
-
-
-# -----------------------------
-# HEALTH CHECK
+# ROOT
 # -----------------------------
 @app.get("/")
 def root():
@@ -101,21 +75,23 @@ def root():
 
 
 # -----------------------------
-# SAFE DATA ENDPOINT
+# SAFE ACCESSOR
+# -----------------------------
+def get_df():
+    return df
+
+
+# -----------------------------
+# API
 # -----------------------------
 @app.get("/api/data")
 def get_data(category: str, district: str = "Christina", discipline: str = "in_school"):
 
     data = get_df()
 
-    if data is None:
-        return {"status": "loading", "message": "Dataset still loading, try again in ~10 seconds"}
+    if data is None or data.empty:
+        return {"status": "loading"}
 
-    # district filter
-    district_name = "Christina School District"
-    df_local = data[data["District"] == district_name]
-
-    # subgroup filter mapping
     mapping = {
         "Black": "African American",
         "White": "White",
@@ -129,7 +105,7 @@ def get_data(category: str, district: str = "Christina", discipline: str = "in_s
     if category not in mapping:
         return []
 
-    work = df_local[df_local["SubGroup"] == mapping[category]]
+    work = data[data["SubGroup"] == mapping[category]]
 
     result = (
         work.groupby("School Year", as_index=False)["PctEnrollment"]
@@ -138,27 +114,3 @@ def get_data(category: str, district: str = "Christina", discipline: str = "in_s
     )
 
     return result.to_dict("records")
-
-
-# -----------------------------
-# OUTLIERS (SAFE PLACEHOLDER)
-# -----------------------------
-@app.get("/api/outliers")
-def outliers():
-    data = get_df()
-    if data is None:
-        return {"status": "loading"}
-    return data.head(20).to_dict("records")
-
-
-# -----------------------------
-# SCHOOL DETAIL
-# -----------------------------
-@app.get("/api/school-deep-dive")
-def school_deep_dive(school: str):
-    data = get_df()
-    if data is None:
-        return {"status": "loading"}
-
-    df_school = data[data["Organization"] == school]
-    return df_school.to_dict("records")
