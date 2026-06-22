@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
+S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.parquet"
 
 df = None
 df_ready = threading.Event()
@@ -34,28 +34,6 @@ DISTRICTS = {
 
 DISCIPLINE_OPTIONS = ("in_school", "out_of_school", "both")
 
-# Optimised dtypes — cuts RAM usage by ~60-70 %
-_DTYPE_MAP = {
-    "School Year":   "category",
-    "District Code": "category",
-    "District":      "category",
-    "School Code":   "category",
-    "Organization":  "category",
-    "Race":          "category",
-    "Gender":        "category",
-    "Grade":         "category",
-    "SpecialDemo":   "category",
-    "Geography":     "category",
-    "SubGroup":      "category",
-    "Category":      "category",
-    "Rowstatus":     "category",
-    "Students":      "float32",
-    "Enrollment":    "float32",
-    "PctEnrollment": "float32",
-    "Incidents":     "float32",
-    "AvgDuration":   "float32",
-}
-
 
 # -----------------------------
 # BACKGROUND DATA LOADER
@@ -66,38 +44,7 @@ def _load_data_background() -> None:
 
     try:
         print("Loading dataset from S3...")
-
-        data = pd.read_csv(
-            S3_URL,
-            low_memory=False,
-            on_bad_lines="skip",
-            dtype=_DTYPE_MAP,
-        )
-
-        data.columns = [
-            "School Year", "District Code", "District", "School Code", "Organization",
-            "Race", "Gender", "Grade", "SpecialDemo", "Geography", "SubGroup", "Category",
-            "Rowstatus", "Students", "Enrollment", "PctEnrollment", "Incidents", "AvgDuration",
-        ]
-
-        data = data.fillna(0)
-
-        # Numeric cleanup — strip commas and coerce (dtype already float32 but
-        # in case any values slipped through as strings before dtype cast)
-        for col in ["Students", "Enrollment", "PctEnrollment", "Incidents", "AvgDuration"]:
-            data[col] = pd.to_numeric(
-                data[col].astype(str).str.replace(",", "", regex=False),
-                errors="coerce",
-            ).fillna(0).astype("float32")
-
-        # Pre-filter to only the 4 districts we serve — reduces working set
-        district_names = set(DISTRICTS.values())
-        data = data[data["District"].isin(district_names)]
-
-        # Re-encode categories after filtering so unused levels are dropped
-        for col in data.select_dtypes("category").columns:
-            data[col] = data[col].cat.remove_unused_categories()
-
+        data = pd.read_parquet(S3_URL)
         df = data
         print("Dataset loaded successfully.")
 
@@ -322,7 +269,7 @@ def school_deep_dive(school: str, district: str = "Christina"):
     school_df = school_df.sort_values("School Year", ascending=False)
 
     # Last 3 years
-    years    = school_df["School Year"].unique()[:3]
+    years     = school_df["School Year"].unique()[:3]
     school_df = school_df[school_df["School Year"].isin(years)]
 
     # Redaction consistency
