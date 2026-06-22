@@ -122,8 +122,12 @@ def get_data(
     # Build full district name from key, falling back to accepting the full
     # name directly so all districts in the parquet work (not just the 4)
     district_name = DISTRICTS.get(district, district)
+    district_df = df_local[df_local["District"] == district_name].copy()
+    district_df["SubGroup"]   = district_df["SubGroup"].astype(str)
+    district_df["Category"]   = district_df["Category"].astype(str)
+    district_df["School Year"] = district_df["School Year"].astype(str)
+    district_df["Organization"] = district_df["Organization"].astype(str)
 
-    district_df = df_local[df_local["District"] == district_name]
 
     # Filter to district-level aggregate row only (Organization == District name)
     district_org_df = district_df[district_df["Organization"] == district_name]
@@ -198,8 +202,14 @@ def get_data(
 def get_outliers(district: str = "Christina", discipline: str = "in_school"):
     df_local = get_df()
 
-    district_name = DISTRICTS.get(district, DISTRICTS["Christina"])
-    district_df = df_local[df_local["District"] == district_name]
+    district_name = DISTRICTS.get(district, district)
+    district_df = df_local[df_local["District"] == district_name].copy()
+
+    # Convert categoricals to strings to avoid groupby length mismatch
+    district_df["Organization"] = district_df["Organization"].astype(str)
+    district_df["School Year"]  = district_df["School Year"].astype(str)
+    district_df["SubGroup"]     = district_df["SubGroup"].astype(str)
+    district_df["Category"]     = district_df["Category"].astype(str)
 
     base = district_df[district_df["Category"].isin([
         "In-School Suspension",
@@ -240,6 +250,10 @@ def get_outliers(district: str = "Christina", discipline: str = "in_school"):
         - (merged["all_students_students"] / merged["all_students_enrollment"].replace(0, np.nan))
     ).fillna(0)
 
+    merged["incident_rate"] = (
+        merged["all_students_incidents"] / merged["all_students_enrollment"].replace(0, np.nan)
+    ).fillna(0)
+
     def calc_stats(row):
         a  = row["black_students"]
         n1 = row["black_enrollment"]
@@ -254,7 +268,7 @@ def get_outliers(district: str = "Christina", discipline: str = "in_school"):
         rr = (p1 / p2) if p2 else None
 
         try:
-            table   = np.array([[a, n1 - a], [c, n2 - c]])
+            table = np.array([[a, n1 - a], [c, n2 - c]])
             _, p_value, _, _ = stats.chi2_contingency(table, correction=False)
         except Exception:
             p_value = None
@@ -263,8 +277,17 @@ def get_outliers(district: str = "Christina", discipline: str = "in_school"):
 
     merged[["risk_ratio", "p_value", "school_year"]] = merged.apply(calc_stats, axis=1)
 
-    return merged.to_dict("records")
+    merged["black_pct_enrollment"] = (
+        merged["black_students"] / merged["black_enrollment"].replace(0, np.nan)
+    ).fillna(0) * 100
 
+    merged["all_students_pct_enrollment"] = (
+        merged["all_students_students"] / merged["all_students_enrollment"].replace(0, np.nan)
+    ).fillna(0) * 100
+
+    merged = merged.sort_values("difference", ascending=False).reset_index(drop=True)
+
+    return merged.to_dict("records")
 
 # -----------------------------
 # /api/school-deep-dive
@@ -273,8 +296,12 @@ def get_outliers(district: str = "Christina", discipline: str = "in_school"):
 def school_deep_dive(school: str, district: str = "Christina"):
     df_local = get_df()
 
-    district_name = DISTRICTS.get(district, DISTRICTS["Christina"])
-    district_df = df_local[df_local["District"] == district_name]
+    district_name = DISTRICTS.get(district, district)
+    district_df = df_local[df_local["District"] == district_name].copy()
+    district_df["SubGroup"]   = district_df["SubGroup"].astype(str)
+    district_df["Category"]   = district_df["Category"].astype(str)
+    district_df["School Year"] = district_df["School Year"].astype(str)
+    district_df["Organization"] = district_df["Organization"].astype(str)
 
     school_df = district_df[district_df["Organization"] == school].copy()
 
