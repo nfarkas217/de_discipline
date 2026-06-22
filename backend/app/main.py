@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,13 +19,15 @@ df = None
 
 
 # -----------------------------
-# SAFE SYNCHRONOUS LOAD (NO THREADS)
+# LAZY LOAD (ONLY WHEN NEEDED)
 # -----------------------------
-@app.on_event("startup")
-def load_data():
+def get_data():
     global df
 
-    print("Loading dataset from S3...")
+    if df is not None:
+        return df
+
+    print("Loading dataset (first request only)...")
 
     try:
         data = pd.read_csv(
@@ -43,31 +44,16 @@ def load_data():
 
         data = data.fillna(0)
 
-        for col in ["Students", "Enrollment", "PctEnrollment", "Incidents", "AvgDuration"]:
-            data[col] = pd.to_numeric(
-                data[col].astype(str).str.replace(",", "", regex=False),
-                errors="coerce"
-            ).fillna(0)
-
-        data = data[
-            (data["Gender"] == "All Students") &
-            (data["Grade"] == "All Students") &
-            (data["Category"].isin(["In-School Suspension", "Out-of-School Suspension"]))
-        ]
-
-        data["School Year"] = data["School Year"].astype(str)
-
         df = data
-
-        print("Dataset loaded successfully")
+        return df
 
     except Exception as e:
-        print("DATA LOAD FAILED:", e)
-        df = pd.DataFrame()
+        print("LOAD FAILED:", e)
+        return pd.DataFrame()
 
 
 # -----------------------------
-# ROOT
+# HEALTH CHECK (FAST)
 # -----------------------------
 @app.get("/")
 def root():
@@ -75,21 +61,14 @@ def root():
 
 
 # -----------------------------
-# SAFE ACCESSOR
-# -----------------------------
-def get_df():
-    return df
-
-
-# -----------------------------
-# API
+# API (SAFE)
 # -----------------------------
 @app.get("/api/data")
-def get_data(category: str, district: str = "Christina", discipline: str = "in_school"):
+def get_data_api(category: str):
 
-    data = get_df()
+    data = get_data()
 
-    if data is None or data.empty:
+    if data.empty:
         return {"status": "loading"}
 
     mapping = {
@@ -97,8 +76,6 @@ def get_data(category: str, district: str = "Christina", discipline: str = "in_s
         "White": "White",
         "Asian": "Asian",
         "Hispanic": "Hispanic/Latino",
-        "Students with Disabilities": "Students with Disabilities",
-        "Low-income students": "Low Income",
         "All Students": "All Students",
     }
 
