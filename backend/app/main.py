@@ -287,7 +287,13 @@ def get_outliers(district: str = "Christina", discipline: str = "in_school"):
 
     merged = merged.sort_values("difference", ascending=False).reset_index(drop=True)
 
-    return merged.to_dict("records")
+    # Replace nan/inf with None so JSON serialization works
+    result = merged.to_dict("records")
+    for row in result:
+        for key, value in row.items():
+            if isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
+                row[key] = None
+    return result
 
 # -----------------------------
 # /api/school-deep-dive
