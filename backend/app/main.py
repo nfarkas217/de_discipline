@@ -30,6 +30,21 @@ DISTRICTS = {
     "Colonial": "Colonial School District",
     "Indian River": "Indian River School District",
     "Red Clay": "Red Clay Consolidated School District",
+    "Capital": "Capital School District",
+    "Caesar Rodney": "Caesar Rodney School District",
+    "Lake Forest": "Lake Forest School District",
+    "Laurel": "Laurel School District",
+    "Cape Henlopen": "Cape Henlopen School District",
+    "Milford": "Milford School District",
+    "Seaford": "Seaford School District",
+    "Smyrna": "Smyrna School District",
+    "Appoquinimink": "Appoquinimink School District",
+    "Brandywine": "Brandywine School District",
+    "Woodbridge": "Woodbridge School District",
+    "Delmar": "Delmar School District",
+    "NCC Vo-Tech": "New Castle County Vocational-Technical School District",
+    "POLYTECH": "POLYTECH School District",
+    "Sussex Technical": "Sussex Technical School District",
 }
 
 DISCIPLINE_OPTIONS = ("in_school", "out_of_school", "both")
@@ -104,19 +119,24 @@ def get_data(
 ):
     df_local = get_df()
 
-    district_name = DISTRICTS.get(district, DISTRICTS["Christina"])
+    # Build full district name from key, falling back to accepting the full
+    # name directly so all districts in the parquet work (not just the 4)
+    district_name = DISTRICTS.get(district, district)
+
     district_df = df_local[df_local["District"] == district_name]
+
+    # Filter to district-level aggregate row only (Organization == District name)
+    district_org_df = district_df[district_df["Organization"] == district_name]
 
     # Discipline filter
     if discipline == "in_school":
-        work_df = district_df[district_df["Category"] == "In-School Suspension"].copy()
+        work_df = district_org_df[district_org_df["Category"] == "In-School Suspension"].copy()
     elif discipline == "out_of_school":
-        work_df = district_df[district_df["Category"] == "Out-of-School Suspension"].copy()
+        work_df = district_org_df[district_org_df["Category"] == "Out-of-School Suspension"].copy()
     else:
-        work_df = district_df[
-            district_df["Category"].isin(["In-School Suspension", "Out-of-School Suspension"])
+        work_df = district_org_df[
+            district_org_df["Category"].isin(["In-School Suspension", "Out-of-School Suspension"])
         ]
-
         work_df = (
             work_df.groupby(["SubGroup", "School Year"], as_index=False)
             .agg({
@@ -125,7 +145,6 @@ def get_data(
                 "Incidents":  "sum",
             })
         )
-
         work_df["PctEnrollment"] = (
             work_df["Students"] / work_df["Enrollment"].replace(0, np.nan)
         ).fillna(0) * 100
@@ -152,7 +171,6 @@ def get_data(
         ["School Year", "SubGroup", "PctEnrollment", "Students", "Enrollment"]
     ].copy()
 
-    # Redaction consistency
     if "Rowstatus" in rslt_df.columns:
         chart_data["redacted"] = (
             rslt_df["Rowstatus"].astype(str).str.upper() == "REDACTED"
@@ -164,17 +182,14 @@ def get_data(
     chart_data = chart_data.rename(
         columns={"SubGroup": "name", "PctEnrollment": "value"}
     )
-
     chart_data = chart_data.sort_values("School Year")
 
     out = chart_data.to_dict("records")
-
     for row in out:
         if row.get("redacted"):
             row["value"] = None
 
     return out
-
 
 # -----------------------------
 # /api/outliers
