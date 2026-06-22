@@ -10,7 +10,7 @@ from pathlib import Path
 # Christina, Colonial, Indian River, Red Clay
 
 S3_URL = "https://de-discipline-bucket.s3.us-east-2.amazonaws.com/Student_Discipline.csv"
-df = pd.read_csv(S3_URL)
+df = pd.read_csv(S3_URL, low_memory=False)
 
 #df = pd.read_csv('backend/Student_Discipline.csv')
 df.columns = ["School Year","District Code","District","School Code","Organization","Race","Gender","Grade","SpecialDemo",
